@@ -11,5 +11,9 @@
       "src": "/api/bot",
       "dest": "/api/bot.js"
     }
-  ]
+  ],
+  "cron": {
+    "schedule": "@hourly",
+    "url": "/api/bot"
+  }
 }

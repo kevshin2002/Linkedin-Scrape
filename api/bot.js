@@ -2,11 +2,23 @@ require('dotenv').config();
 const { Client, GatewayIntentBits, EmbedBuilder } = require('discord.js');
 const scrapeLinkedInJobs = require('../scrape');
 
-console.log('Initializing Discord bot...');
+let client;
 
-const client = new Client({
-    intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMessages, GatewayIntentBits.MessageContent]
-});
+async function initializeBot() {
+    if (!client) {
+        client = new Client({
+            intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMessages, GatewayIntentBits.MessageContent]
+        });
+
+        console.log('Initializing Discord bot...');
+
+        client.once('ready', () => {
+            console.log(`Logged in as ${client.user.tag}!`);
+        });
+
+        await client.login(process.env.DISCORD_TOKEN);
+    }
+}
 
 const CHANNEL_ROLES = {
     '1279335000172400671': ['Software Engineer'],
@@ -26,15 +38,11 @@ const usStates = [
     "Ohio", "OH", "Oklahoma", "OK", "Oregon", "OR", "Pennsylvania", "PA", "Rhode Island", "RI", "South Carolina", "SC",
     "South Dakota", "SD", "Tennessee", "TN", "Texas", "TX", "Utah", "UT", "Vermont", "VT", "Virginia", "VA", "Washington", "WA",
     "West Virginia", "WV", "Wisconsin", "WI", "Wyoming", "WY",
-    // U.S. Territories
     "American Samoa", "AS", "Guam", "GU", "Northern Mariana Islands", "MP", "Puerto Rico", "PR", "United States Virgin Islands", "VI", "District of Columbia", "DC"
 ];
 
 const excludeTerms = ["masters", "master", "phd", "ph.d", "doctorate", "ms", "m.s.", "m.s", "msc", "m.sc", "mba", 
                       "security clearance", "clearance", "TS/SCI", "Top Secret", "Secret Clearance"];
-
-const CHECK_INTERVAL = 60 * 60 * 1000; // 1 hour in milliseconds
-let postedJobs = new Set();
 
 function isUSLocation(location) {
     return usStates.some(state => location.includes(state));
@@ -45,6 +53,16 @@ function excludesAdvancedDegrees(description) {
         return false; // If no description, assume it doesn't require advanced degrees
     }
     return excludeTerms.some(term => description.toLowerCase().includes(term));
+}
+
+function categorizeJob(jobTitle) {
+    jobTitle = jobTitle.toLowerCase();
+    for (const [channelId, keywords] of Object.entries(CHANNEL_ROLES)) {
+        if (keywords.some(keyword => jobTitle.includes(keyword.toLowerCase()))) {
+            return channelId;
+        }
+    }
+    return null; // Return null if no matching category is found
 }
 
 async function postJobsToChannel() {
@@ -74,7 +92,7 @@ async function postJobsToChannel() {
     try {
         for (const [keyword, jobs] of Object.entries(jobsByKeyword)) {
             for (const job of jobs) {
-                if (!postedJobs.has(job.jobLink) && isUSLocation(job.location) && !excludesAdvancedDegrees(job.description)) {
+                if (!postedJobs.has(job.jobLink) && isUSLocation(job.location) && !excludesAdvancedDegrees(job.description || job.requirements || job.qualifications)) {
                     const channelId = categorizeJob(job.jobTitle);
 
                     if (channelId) {
@@ -82,9 +100,9 @@ async function postJobsToChannel() {
 
                         if (channel) {
                             const embed = new EmbedBuilder()
-                                .setColor('#0077B5') 
+                                .setColor('#0077B5')
                                 .setTitle(job.jobTitle)
-                                .setURL(job.jobLink) 
+                                .setURL(job.jobLink)
                                 .setAuthor({ name: job.companyName })
                                 .addFields(
                                     { name: 'Location', value: job.location, inline: true },
@@ -113,28 +131,11 @@ async function postJobsToChannel() {
     }
 }
 
-function categorizeJob(jobTitle) {
-    jobTitle = jobTitle.toLowerCase();
-    for (const [channelId, keywords] of Object.entries(CHANNEL_ROLES)) {
-        if (keywords.some(keyword => jobTitle.includes(keyword.toLowerCase()))) {
-            return channelId;
-        }
-    }
-    return null; // Return null if no matching category is found
-}
-
 // Serverless function handler for Vercel
 module.exports = async (req, res) => {
     try {
-        console.log('Received request to post jobs...');
-
-        if (!client.isReady()) {
-            console.log('Logging into Discord...');
-            await client.login(process.env.DISCORD_TOKEN);
-            console.log('Discord bot is online!');
-        }
-
-        await postJobsToChannel();
+        await initializeBot(); // Initialize the bot
+        await postJobsToChannel(); // Post jobs
 
         res.status(200).send('Job postings updated.');
     } catch (error) {
@@ -142,16 +143,3 @@ module.exports = async (req, res) => {
         res.status(500).send('Failed to update job postings.');
     }
 };
-
-// For local testing
-if (require.main === module) {
-    (async () => {
-        console.log('Running bot locally...');
-        await client.login(process.env.DISCORD_TOKEN);
-        console.log('Discord bot is online!');
-        
-        await postJobsToChannel();
-
-        setInterval(postJobsToChannel, CHECK_INTERVAL);
-    })().catch(console.error);
-}
