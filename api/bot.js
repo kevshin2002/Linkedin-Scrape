@@ -74,8 +74,8 @@ function categorizeJob(jobTitle) {
     return null; // Return null if no matching category is found
 }
 
-async function postJobsToChannel() {
-    console.log('Starting to scrape jobs...');
+async function postJobsToChannel(start = 0) {
+    console.log(`Starting to scrape jobs from offset ${start}...`);
     const keywords = [
         "software engineer new grad 2025",
         "software engineer early career",
@@ -89,14 +89,14 @@ async function postJobsToChannel() {
         "data scientist intern 2025",
         "machine learning intern 2025"
     ];
-    const jobsByKeyword = await scrapeLinkedInJobs(keywords);
-
-    console.log('Jobs by keyword:', JSON.stringify(jobsByKeyword, null, 2));
+    const jobsByKeyword = await scrapeLinkedInJobs(keywords, start);
 
     if (Object.keys(jobsByKeyword).length === 0) {
         console.log('No new jobs found.');
         return;
     }
+
+    let jobsPosted = 0;
 
     try {
         for (const [keyword, jobs] of Object.entries(jobsByKeyword)) {
@@ -123,6 +123,7 @@ async function postJobsToChannel() {
                             await channel.send({ embeds: [embed] });
 
                             postedJobs.add(job.jobLink);
+                            jobsPosted++;
                         } else {
                             console.error(`Channel not found: ${channelId}`);
                         }
@@ -137,6 +138,12 @@ async function postJobsToChannel() {
         console.log('Successfully posted new jobs to relevant channels');
     } catch (error) {
         console.error('Error fetching or sending to channels:', error);
+    }
+
+    // If we hit a job posting limit, recurse to fetch and post more jobs
+    if (jobsPosted >= 25) { // Adjust 25 to whatever batch size you're using
+        console.log(`Processed ${jobsPosted} jobs, fetching more...`);
+        await postJobsToChannel(start + 25); // Move to the next page of job results
     }
 }
 
