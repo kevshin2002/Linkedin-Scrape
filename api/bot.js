@@ -44,6 +44,8 @@ const usStates = [
 const excludeTerms = ["masters", "master", "phd", "ph.d", "doctorate", "ms", "m.s.", "m.s", "msc", "m.sc", "mba", 
                       "security clearance", "clearance", "TS/SCI", "Top Secret", "Secret Clearance"];
 
+let postedJobs = new Set();
+
 function isUSLocation(location) {
     return usStates.some(state => location.includes(state));
 }
