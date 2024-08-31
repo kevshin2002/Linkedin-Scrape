@@ -20,6 +20,7 @@ async function initializeBot() {
     }
 }
 
+
 const CHANNEL_ROLES = {
     '1279335000172400671': ['Software Engineer'],
     '1279335092132646912': ['Data Scientist', 'Data Engineer', 'Data Analyst'],
@@ -133,12 +134,12 @@ async function postJobsToChannel() {
     }
 }
 
-// Serverless function handler for Vercel
 module.exports = async (req, res) => {
     try {
         await initializeBot(); // Initialize the bot
         await postJobsToChannel(); // Post jobs
 
+        // Respond to the HTTP request to complete the function
         res.status(200).send('Job postings updated.');
     } catch (error) {
         console.error('An error occurred:', error);
