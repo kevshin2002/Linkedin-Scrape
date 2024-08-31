@@ -16,9 +16,15 @@ async function initializeBot() {
             console.log(`Logged in as ${client.user.tag}!`);
         });
 
-        await client.login(process.env.DISCORD_TOKEN);
+        try {
+            await client.login(process.env.DISCORD_TOKEN);
+            console.log('Bot successfully logged in.');
+        } catch (error) {
+            console.error('Failed to log in:', error);
+        }
     }
 }
+
 
 
 const CHANNEL_ROLES = {
