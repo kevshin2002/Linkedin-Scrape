@@ -2,14 +2,17 @@
     "name": "linkedin-scrape",
     "version": "1.0.0",
     "scripts": {
-      "dev": "next dev",
-      "build": "next build",
-      "start": "next start"
+        "dev": "next dev",
+        "build": "next build",
+        "start": "next start"
     },
     "dependencies": {
-      "next": "^13.0.0",        
-      "react": "^18.0.0",
-      "react-dom": "^18.0.0"
+        "axios": "^1.7.6",
+        "cheerio": "^1.0.0",
+        "discord.js": "^14.15.3",
+        "dotenv": "^16.4.5",
+        "next": "^14.2.7",
+        "react": "^18.0.0",
+        "react-dom": "^18.0.0"
     }
-  }
-  
+}
