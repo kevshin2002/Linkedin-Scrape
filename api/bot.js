@@ -89,6 +89,7 @@ async function postJobsToChannel(start = 0) {
         "data scientist intern 2025",
         "machine learning intern 2025"
     ];
+    
     const jobsByKeyword = await scrapeLinkedInJobs(keywords, start);
 
     if (Object.keys(jobsByKeyword).length === 0) {
@@ -124,6 +125,15 @@ async function postJobsToChannel(start = 0) {
 
                             postedJobs.add(job.jobLink);
                             jobsPosted++;
+
+                            // Break if about to hit the time limit
+                            if (jobsPosted >= 5) {
+                                console.log(`Posted ${jobsPosted} jobs, pausing to avoid timeout...`);
+                                setTimeout(() => {
+                                    postJobsToChannel(start + jobsPosted);
+                                }, 1000); // Wait for 1 second before processing the next batch
+                                return;
+                            }
                         } else {
                             console.error(`Channel not found: ${channelId}`);
                         }
@@ -135,27 +145,60 @@ async function postJobsToChannel(start = 0) {
                 }
             }
         }
-        console.log('Successfully posted new jobs to relevant channels');
     } catch (error) {
-        console.error('Error fetching or sending to channels:', error);
-    }
-
-    // If we hit a job posting limit, recurse to fetch and post more jobs
-    if (jobsPosted >= 25) { // Adjust 25 to whatever batch size you're using
-        console.log(`Processed ${jobsPosted} jobs, fetching more...`);
-        await postJobsToChannel(start + 25); // Move to the next page of job results
+        console.error('Error in postJobsToChannel:', error);
     }
 }
 
+// Triggered by an HTTP request
 module.exports = async (req, res) => {
     try {
-        await initializeBot(); // Initialize the bot
-        await postJobsToChannel(); // Post jobs
+        await initializeBot();
+        await postJobsToChannel();
 
-        // Respond to the HTTP request to complete the function
         res.status(200).send('Job postings updated.');
     } catch (error) {
         console.error('An error occurred:', error);
         res.status(500).send('Failed to update job postings.');
     }
 };
+
+async function scrapeLinkedInJobs(keywords, start = 0) {
+    try {
+        const jobsByKeyword = {};
+        for (const keyword of keywords) {
+            const url = `https://www.linkedin.com/jobs/search?keywords=${encodeURIComponent(keyword)}&location=Worldwide&start=${start}&count=25`; 
+            const { data } = await axios.get(url, {
+                headers: {
+                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+                }
+            });
+            const $ = cheerio.load(data);
+            const jobs = [];
+            $('.jobs-search__results-list li').each((i, el) => {
+                const jobTitle = $(el).find('h3.base-search-card__title').text().trim();
+                const companyName = $(el).find('h4.base-search-card__subtitle').text().trim();
+                const location = $(el).find('.job-search-card__location').text().trim();
+                const salary = $(el).find('.job-search-card__salary-info').text().trim() || 'Not specified';
+                const jobLink = $(el).find('a.base-card__full-link').attr('href');
+
+                if (jobTitle && companyName && jobLink) {
+                    jobs.push({ 
+                        jobTitle, 
+                        companyName, 
+                        location,
+                        salary, 
+                        jobLink 
+                    });
+                }
+            });
+            if (jobs.length > 0) {
+                jobsByKeyword[keyword] = jobs;
+            }
+        }
+        return jobsByKeyword;
+    } catch (error) {
+        console.error('An unexpected error occurred:', error);
+        return {};
+    }
+}
