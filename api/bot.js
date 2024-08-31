@@ -3,25 +3,16 @@ const { Client, GatewayIntentBits, EmbedBuilder } = require('discord.js');
 const scrapeLinkedInJobs = require('../scrape');
 
 let client;
+let postedJobs = new Set();
 
 async function initializeBot() {
     if (!client) {
         client = new Client({
             intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMessages, GatewayIntentBits.MessageContent]
         });
-
         console.log('Initializing Discord bot...');
-
-        client.once('ready', () => {
-            console.log(`Logged in as ${client.user.tag}!`);
-        });
-
-        try {
-            await client.login(process.env.DISCORD_TOKEN);
-            console.log('Bot successfully logged in.');
-        } catch (error) {
-            console.error('Failed to log in:', error);
-        }
+        await client.login(process.env.DISCORD_TOKEN);
+        console.log(`Logged in as ${client.user.tag}!`);
     }
 }
 
@@ -51,8 +42,6 @@ const usStates = [
 const excludeTerms = ["masters", "master", "phd", "ph.d", "doctorate", "ms", "m.s.", "m.s", "msc", "m.sc", "mba", 
                       "security clearance", "clearance", "TS/SCI", "Top Secret", "Secret Clearance"];
 
-let postedJobs = new Set();
-
 function isUSLocation(location) {
     return usStates.some(state => location.includes(state));
 }
@@ -75,31 +64,20 @@ function categorizeJob(jobTitle) {
 }
 
 async function postJobsToChannel(start = 0) {
-    console.log(`Starting to scrape jobs from offset ${start}...`);
-    const keywords = [
-        "software engineer new grad 2025",
-        "software engineer early career",
-        "data scientist new grad 2025",
-        "data engineer new grad 2025",
-        "machine learning new grad 2025",
-        "deep learning new grad 2025",
-        "computer vision new grad 2025",
-        "artificial intelligence new grad 2025",
-        "software engineer intern 2025",
-        "data scientist intern 2025",
-        "machine learning intern 2025"
-    ];
-    
-    const jobsByKeyword = await scrapeLinkedInJobs(keywords, start);
-
-    if (Object.keys(jobsByKeyword).length === 0) {
-        console.log('No new jobs found.');
-        return;
-    }
-
-    let jobsPosted = 0;
-
     try {
+        await initializeBot();
+
+        console.log(`Starting to scrape jobs from offset ${start}...`);
+        const keywords = ["software engineer new grad 2025", /* other keywords */];
+        const jobsByKeyword = await scrapeLinkedInJobs(keywords, start);
+
+        if (Object.keys(jobsByKeyword).length === 0) {
+            console.log('No new jobs found.');
+            return;
+        }
+
+        let jobsPosted = 0;
+
         for (const [keyword, jobs] of Object.entries(jobsByKeyword)) {
             for (const job of jobs) {
                 if (!postedJobs.has(job.jobLink) && isUSLocation(job.location) && !excludesAdvancedDegrees(job.description || job.requirements || job.qualifications)) {
@@ -125,15 +103,6 @@ async function postJobsToChannel(start = 0) {
 
                             postedJobs.add(job.jobLink);
                             jobsPosted++;
-
-                            // Break if about to hit the time limit
-                            if (jobsPosted >= 5) {
-                                console.log(`Posted ${jobsPosted} jobs, pausing to avoid timeout...`);
-                                setTimeout(() => {
-                                    postJobsToChannel(start + jobsPosted);
-                                }, 1000); // Wait for 1 second before processing the next batch
-                                return;
-                            }
                         } else {
                             console.error(`Channel not found: ${channelId}`);
                         }
@@ -145,6 +114,16 @@ async function postJobsToChannel(start = 0) {
                 }
             }
         }
+
+        // Re-trigger the function to process the next batch
+        if (jobsPosted >= 2) { // Adjust 2 to an even smaller batch size if needed
+            setTimeout(() => {
+                postJobsToChannel(start + jobsPosted);
+            }, 1000); // Wait for 1 second before processing the next batch
+        } else {
+            console.log('No more jobs to process.');
+        }
+
     } catch (error) {
         console.error('Error in postJobsToChannel:', error);
     }
@@ -153,9 +132,7 @@ async function postJobsToChannel(start = 0) {
 // Triggered by an HTTP request
 module.exports = async (req, res) => {
     try {
-        await initializeBot();
         await postJobsToChannel();
-
         res.status(200).send('Job postings updated.');
     } catch (error) {
         console.error('An error occurred:', error);
